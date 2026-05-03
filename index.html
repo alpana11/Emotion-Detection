@@ -124,11 +124,48 @@ button.analyze:hover {
     box-shadow: 0 8px 20px rgba(236,72,153,0.3);
 }
 
+/* FADE IN */
+@keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.card {
+    animation: fadeInUp 0.5s ease both;
+}
+
 /* RESULT */
 .result {
     margin-top: 20px;
     font-size: 18px;
     font-weight: bold;
+}
+
+@keyframes popIn {
+    0%   { transform: scale(0.8); opacity: 0; }
+    70%  { transform: scale(1.1); }
+    100% { transform: scale(1);   opacity: 1; }
+}
+
+.result.show {
+    animation: popIn 0.4s ease both;
+}
+
+/* SPINNER */
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.spinner {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 2px solid rgba(255,255,255,0.4);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    vertical-align: middle;
+    margin-right: 6px;
 }
 
 /* RIGHT */
@@ -175,9 +212,9 @@ button.analyze:hover {
         <h1>Analyze Feedback</h1>
         <p>Understand customer emotions instantly</p>
 
-        <textarea id="review" placeholder="Write feedback..."></textarea>
+        <textarea id="review" placeholder="Try: 'Amazing product', 'Worst experience', 'It was okay'"></textarea>
 
-        <button class="analyze" onclick="analyzeEmotion()">Analyze Emotion</button>
+        <button class="analyze" onclick="analyzeEmotion()">Analyze Feedback 🚀</button>
 
         <div class="result" id="result"></div>
     </div>
@@ -185,7 +222,7 @@ button.analyze:hover {
     <!-- RIGHT -->
     <div class="right">
         <h3>Recent Feedback</h3>
-        <div id="historyList"></div>
+        <div id="history"></div>
     </div>
 
 </div>
@@ -196,48 +233,72 @@ function goBack() {
     window.location.href = "login.html";
 }
 
-function saveHistory(text, emotion) {
-    let h = JSON.parse(localStorage.getItem("h")) || [];
-    h.unshift({text, emotion});
-    if (h.length > 4) h.pop();
-    localStorage.setItem("h", JSON.stringify(h));
-}
+let history = [];
 
-function loadHistory() {
-    let h = JSON.parse(localStorage.getItem("h")) || [];
-    let list = document.getElementById("historyList");
-    list.innerHTML = "";
-
-    if (h.length === 0) {
-        list.innerHTML = "<p style='color:#888;'>No feedback yet</p>";
-        return;
-    }
-
-    h.forEach(i => {
-        let div = document.createElement("div");
-        div.className = "history-item";
-        div.innerText = i.emotion + " - " + i.text;
-        list.appendChild(div);
-    });
+function updateHistory(text, emotion) {
+    history.unshift(`${emotion} - ${text}`);
+    if (history.length > 5) history.pop();
+    const historyDiv = document.getElementById("history");
+    historyDiv.innerHTML = history.map(item => `<div class="history-item">${item}</div>`).join("");
 }
 
 async function analyzeEmotion() {
     let text = document.getElementById("review").value;
-    if (!text.trim()) return alert("Enter feedback");
+    if (text.trim() === "") {
+        alert("Please enter feedback");
+        return;
+    }
 
-    let emotion = ["Happy","Neutral","Angry"][Math.floor(Math.random()*3)];
+    let btn = document.querySelector("button.analyze");
+    btn.innerHTML = "<span class='spinner'></span>Analyzing...";
+    btn.disabled = true;
 
-    let color = emotion === "Happy" ? "#22c55e" :
-                emotion === "Neutral" ? "#f59e0b" : "#ef4444";
+    let result = document.getElementById("result");
+    result.className = "result";
+    result.innerHTML = "Analyzing...";
 
-    document.getElementById("result").innerHTML =
-        `<span style="color:${color}">Emotion: ${emotion}</span>`;
-
-    saveHistory(text, emotion);
-    loadHistory();
+    fetch("http://127.0.0.1:5000/predict", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: text })
+    })
+    .then(res => res.json())
+    .then(data => {
+        let emotion = data.prediction;
+        let color = emotion === "Happy" ? "green" :
+                    emotion === "Angry" ? "red" : "orange";
+        result.className = "result";
+        result.style.color = color;
+        let emoji = emotion === "Happy" ? "😊" : emotion === "Angry" ? "😡" : "😐";
+        result.innerHTML = `${emoji} <strong>Emotion:</strong> ${emotion}<br><small>"${text}"</small>`;
+        void result.offsetWidth;
+        result.className = "result show";
+        updateHistory(text, emotion);
+    })
+    .catch(() => {
+        result.innerHTML = "⚠️ Could not connect to server.";
+    })
+    .finally(() => {
+        btn.innerHTML = "Analyze Feedback 🚀";
+        btn.disabled = false;
+    });
 }
 
-window.onload = loadHistory;
+function checkEmotion() {
+    let text = document.getElementById("inputText").value;
+
+    fetch("http://127.0.0.1:5000/predict", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: text })
+    })
+    .then(res => res.json())
+    .then(data => {
+        document.getElementById("result").innerText = "Result: " + data.prediction;
+    });
+}
+
+
 </script>
 
 </body>
