@@ -1,37 +1,107 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import pickle
-import string
-import nltk
-from nltk.corpus import stopwords
 
-# Initialize app
-app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}})   # 🔥 IMPORTANT LINE
-
-# Load model
+# -------------------------------
+# Load model and vectorizer
+# -------------------------------
 model = pickle.load(open("model.pkl", "rb"))
 vectorizer = pickle.load(open("vectorizer.pkl", "rb"))
 
-nltk.download('stopwords')
-stop_words = set(stopwords.words('english'))
+# -------------------------------
+# Flask setup
+# -------------------------------
+app = Flask(__name__)
+CORS(app)
 
-def clean_text(text):
+# -------------------------------
+# Feature list (aspects)
+# -------------------------------
+features = ["battery", "camera", "display", "sound", "performance"]
+
+# -------------------------------
+# Sentiment keywords
+# -------------------------------
+positive_words = ["good", "great", "excellent", "amazing", "nice", "best"]
+negative_words = ["bad", "worst", "poor", "terrible", "not good", "not great"]
+
+# -------------------------------
+# BUT logic (IMPORTANT FIX)
+# -------------------------------
+def handle_but_logic(text):
     text = text.lower()
-    text = text.replace("not bad", "notbad")
-    text = text.replace("not good", "notgood")
-    text = "".join([c for c in text if c not in string.punctuation])
-    words = text.split()
-    words = [w for w in words if w not in stop_words or w == "not"]
-    return " ".join(words)
+    if "but" in text:
+        parts = text.split("but")
+        return parts[-1]   # take second part
+    return text
 
+# -------------------------------
+# Aspect-based analysis
+# -------------------------------
+def analyze_aspects(text):
+    text = text.lower()
+    result = {}
+
+    # Split sentence on "but"
+    parts = text.split("but")
+
+    for part in parts:
+        words = part.split()
+
+        for feature in features:
+            if feature in words:
+                if "not good" in part or "not great" in part:
+                    result[feature] = "Not Satisfied ❌"
+                elif any(w in part for w in ["bad", "worst", "poor", "terrible"]):
+                    result[feature] = "Not Satisfied ❌"
+                elif any(w in part for w in ["good", "great", "excellent", "amazing", "nice", "best"]):
+                    result[feature] = "Satisfied ✅"
+                else:
+                    result[feature] = "Neutral 😐"
+
+    return result
+
+# -------------------------------
+# API route
+# -------------------------------
 @app.route('/predict', methods=['POST'])
 def predict():
-    data = request.json.get('text')   # safer
-    cleaned = clean_text(data)
-    vector = vectorizer.transform([cleaned])
-    result = model.predict(vector)[0]
-    return jsonify({"prediction": result})
+    try:
+        data = request.json
+        text = data.get("text", "")
 
+        if not text.strip():
+            return jsonify({"error": "Empty input"}), 400
+
+        # 👉 APPLY BUT LOGIC HERE
+        processed_text = handle_but_logic(text)
+
+        # Overall prediction (using processed text)
+        vector = vectorizer.transform([processed_text])
+        prediction = model.predict(vector)[0]
+
+        # Aspect prediction (use original text)
+        aspects = analyze_aspects(text)
+
+        # Count satisfied vs not satisfied aspects
+        satisfied_count = sum(1 for v in aspects.values() if "Satisfied ✅" in v)
+        not_satisfied_count = sum(1 for v in aspects.values() if "Not Satisfied ❌" in v)
+
+        # If both positive and negative aspects exist, override prediction to Neutral
+        if satisfied_count > 0 and not_satisfied_count > 0:
+            prediction = "Neutral"
+
+        return jsonify({
+            "prediction": prediction,
+            "aspects": aspects
+        })
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# -------------------------------
+# Run server
+# -------------------------------
 if __name__ == '__main__':
     app.run(debug=True)
+    

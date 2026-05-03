@@ -15,7 +15,7 @@
 
 /* BODY */
 body {
-    background: linear-gradient(135deg, #eef2ff, #fdf2f8);
+    background: linear-gradient(to right, #dbeafe, #e0f2fe);
 }
 
 /* NAVBAR */
@@ -65,7 +65,7 @@ body {
     backdrop-filter: blur(12px);
     border-radius: 20px;
     overflow: hidden;
-    box-shadow: 0 20px 50px rgba(0,0,0,0.08);
+    box-shadow: 0 10px 25px rgba(0,0,0,0.1);
     transition: 0.3s;
 }
 
@@ -93,9 +93,9 @@ textarea {
     width: 100%;
     height: 120px;
     margin-top: 15px;
-    padding: 12px;
-    border-radius: 12px;
-    border: 1px solid #e2e8f0;
+    padding: 15px;
+    border-radius: 10px;
+    border: 1px solid #ccc;
     outline: none;
     transition: 0.3s;
 }
@@ -109,10 +109,10 @@ textarea:focus {
 button.analyze {
     margin-top: 15px;
     width: 100%;
-    padding: 12px;
-    border-radius: 12px;
+    padding: 12px 20px;
+    border-radius: 8px;
     border: none;
-    background: linear-gradient(135deg, #6366f1, #ec4899);
+    background: #2563eb;
     color: white;
     font-weight: 500;
     cursor: pointer;
@@ -120,8 +120,7 @@ button.analyze {
 }
 
 button.analyze:hover {
-    transform: scale(1.04);
-    box-shadow: 0 8px 20px rgba(236,72,153,0.3);
+    background: #1d4ed8;
 }
 
 /* FADE IN */
@@ -134,11 +133,16 @@ button.analyze:hover {
     animation: fadeInUp 0.5s ease both;
 }
 
-/* RESULT */
+/* RESULT CARD */
 .result {
+    background: white;
+    padding: 15px;
+    border-radius: 12px;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.1);
     margin-top: 20px;
-    font-size: 18px;
+    font-size: 16px;
     font-weight: bold;
+    transition: background 0.3s;
 }
 
 @keyframes popIn {
@@ -182,18 +186,26 @@ button.analyze:hover {
 
 /* HISTORY */
 .history-item {
-    background: linear-gradient(135deg, #f1f5f9, #eef2ff);
-    padding: 10px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: white;
+    padding: 10px 14px;
     border-radius: 10px;
     margin-bottom: 8px;
     font-size: 14px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    border-left: 4px solid #e2e8f0;
     transition: 0.3s;
 }
 
 .history-item:hover {
     transform: translateX(5px);
-    background: linear-gradient(135deg, #e0e7ff, #fce7f3);
 }
+
+.history-item .h-emoji { font-size: 18px; }
+.history-item .h-text { color: #475569; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.history-item .h-label { margin-left: auto; font-weight: 600; font-size: 12px; }
 </style>
 </head>
 
@@ -209,10 +221,17 @@ button.analyze:hover {
 
     <!-- LEFT -->
     <div class="left">
-        <h1>Analyze Feedback</h1>
-        <p>Understand customer emotions instantly</p>
+        <h1>🧠 Emotion Detection System</h1>
+        <p>Analyze customer feedback instantly</p>
 
-        <textarea id="review" placeholder="Try: 'Amazing product', 'Worst experience', 'It was okay'"></textarea>
+        <textarea id="review" placeholder="Write your feedback..."></textarea>
+
+        <p style="margin-top:10px; color:#64748b; font-size:13px;">Try:</p>
+        <ul style="color:#64748b; font-size:13px; margin-left:18px; margin-top:4px;">
+            <li>"Amazing product"</li>
+            <li>"Worst experience ever"</li>
+            <li>"It was okay"</li>
+        </ul>
 
         <button class="analyze" onclick="analyzeEmotion()">Analyze Feedback 🚀</button>
 
@@ -221,8 +240,8 @@ button.analyze:hover {
 
     <!-- RIGHT -->
     <div class="right">
-        <h3>Recent Feedback</h3>
-        <div id="history"></div>
+        <h3>📋 Recent Feedback</h3>
+        <div id="history"><p style="color:#94a3b8; font-size:13px;">No feedback yet. Analyze something!</p></div>
     </div>
 
 </div>
@@ -235,11 +254,34 @@ function goBack() {
 
 let history = [];
 
-function updateHistory(text, emotion) {
-    history.unshift(`${emotion} - ${text}`);
+function updateHistory(text, emotion, aspects) {
+    history.unshift({ text, emotion, aspects });
     if (history.length > 5) history.pop();
     const historyDiv = document.getElementById("history");
-    historyDiv.innerHTML = history.map(item => `<div class="history-item">${item}</div>`).join("");
+    const emoji = e => e === "Happy" ? "😊" : e === "Angry" ? "😡" : "😐";
+    const color = e => e === "Happy" ? "#22c55e" : e === "Angry" ? "#ef4444" : "#f59e0b";
+    historyDiv.innerHTML = history.map(i => {
+        let aspectHTML = "";
+
+        if (i.aspects) {
+            for (let key in i.aspects) {
+                let value = i.aspects[key];
+
+                let color = value.includes("Satisfied") ? "green" :
+                            value.includes("Not") ? "red" : "orange";
+
+                aspectHTML += `<div style="font-size:12px;">
+                    ${key}: <span style="color:${color}">${value}</span>
+                </div>`;
+            }
+        }
+
+        return `
+        <div class="history-item" style="border-left-color:${color(i.emotion)}">
+            <span class="h-emoji">${emoji(i.emotion)}</span>
+            <span class="h-text"><strong>${i.text}</strong><br>${i.emotion}<br>${aspectHTML}</span>
+        </div>`;
+    }).join("");
 }
 
 async function analyzeEmotion() {
@@ -264,17 +306,54 @@ async function analyzeEmotion() {
     })
     .then(res => res.json())
     .then(data => {
-        let emotion = data.prediction;
-        let color = emotion === "Happy" ? "green" :
-                    emotion === "Angry" ? "red" : "orange";
-        result.className = "result";
-        result.style.color = color;
-        let emoji = emotion === "Happy" ? "😊" : emotion === "Angry" ? "😡" : "😐";
-        result.innerHTML = `${emoji} <strong>Emotion:</strong> ${emotion}<br><small>"${text}"</small>`;
-        void result.offsetWidth;
-        result.className = "result show";
-        updateHistory(text, emotion);
-    })
+    let emotion = data.prediction;
+    let aspects = data.aspects;
+
+    let color = emotion === "Happy" ? "green" :
+                emotion === "Angry" ? "red" : "orange";
+
+    let bg = emotion === "Happy" ? "#dcfce7" :
+             emotion === "Angry" ? "#fee2e2" : "#fef9c3";
+
+    let emoji = emotion === "Happy" ? "😊" :
+                emotion === "Angry" ? "😡" : "😐";
+
+    // 👉 Aspect HTML
+    let aspectHTML = "";
+    if (aspects && Object.keys(aspects).length > 0) {
+        aspectHTML += `<hr><div style="margin-top:8px;"><strong>Feature Analysis:</strong></div>`;
+        
+        for (let key in aspects) {
+            let value = aspects[key];
+
+            let aColor = value.includes("Satisfied") ? "green" :
+                         value.includes("Not") ? "red" : "orange";
+
+            aspectHTML += `<div style="font-size:14px;">
+                <strong>${key}</strong>: <span style="color:${aColor}">${value}</span>
+            </div>`;
+        }
+    }
+
+    result.className = "result";
+    result.style.color = color;
+    result.style.background = bg;
+
+    result.innerHTML = `
+        <div style="font-size: 18px; font-weight: bold;">
+            ${emoji} ${emotion}
+        </div>
+        <div style="font-size: 14px; color: gray;">
+            "${text}"
+        </div>
+        ${aspectHTML}
+    `;
+
+    void result.offsetWidth;
+    result.className = "result show";
+
+    updateHistory(text, emotion, aspects);
+ })
     .catch(() => {
         result.innerHTML = "⚠️ Could not connect to server.";
     })
