@@ -206,6 +206,46 @@ button.analyze:hover {
 .history-item .h-emoji { font-size: 18px; }
 .history-item .h-text { color: #475569; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .history-item .h-label { margin-left: auto; font-weight: 600; font-size: 12px; }
+
+.summary-card,
+.chart-card {
+    background: white;
+    border-radius: 14px;
+    padding: 16px;
+    box-shadow: 0 6px 18px rgba(15,23,42,0.08);
+    margin-bottom: 16px;
+}
+
+.chart-row {
+    margin-top: 12px;
+}
+
+.chart-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    color: #475569;
+    margin-bottom: 6px;
+}
+
+.chart-bar {
+    width: 100%;
+    height: 12px;
+    background: #e2e8f0;
+    border-radius: 999px;
+    overflow: hidden;
+}
+
+.chart-bar > div {
+    height: 100%;
+    border-radius: 999px;
+}
+
+#history {
+    max-height: 420px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
 </style>
 </head>
 
@@ -241,6 +281,27 @@ button.analyze:hover {
     <!-- RIGHT -->
     <div class="right">
         <h3>📋 Recent Feedback</h3>
+        <div id="summary">
+            <div class="summary-card">
+                <div style="font-size:14px; font-weight:600; color:#334155;">Live Insights</div>
+                <div style="margin-top:10px; color:#64748b; font-size:13px;">Analyze sentiment trends and feature complaints from recent feedback.</div>
+            </div>
+        </div>
+
+        <div id="sentimentChart">
+            <div class="chart-card">
+                <div style="font-size:14px; font-weight:600; color:#334155;">Sentiment Distribution</div>
+                <div id="chartBars" style="margin-top:12px; color:#94a3b8; font-size:13px;">Chart will appear once feedback is added.</div>
+            </div>
+        </div>
+
+        <div id="featureChart">
+            <div class="chart-card">
+                <div style="font-size:14px; font-weight:600; color:#334155;">Feature Complaints</div>
+                <div id="featureBars" style="margin-top:12px; color:#94a3b8; font-size:13px;">Feature complaint metrics will appear once feedback is added.</div>
+            </div>
+        </div>
+
         <div id="history"><p style="color:#94a3b8; font-size:13px;">No feedback yet. Analyze something!</p></div>
     </div>
 
@@ -256,7 +317,7 @@ let history = [];
 
 function updateHistory(text, emotion, aspects) {
     history.unshift({ text, emotion, aspects });
-    if (history.length > 5) history.pop();
+    if (history.length > 10) history.pop();
     const historyDiv = document.getElementById("history");
     const emoji = e => e === "Happy" ? "😊" : e === "Angry" ? "😡" : "😐";
     const color = e => e === "Happy" ? "#22c55e" : e === "Angry" ? "#ef4444" : "#f59e0b";
@@ -270,7 +331,7 @@ function updateHistory(text, emotion, aspects) {
                 let color = value.includes("Satisfied") ? "green" :
                             value.includes("Not") ? "red" : "orange";
 
-                aspectHTML += `<div style="font-size:12px;">
+                aspectHTML += `<div style="font-size:12px; margin-top:4px;">
                     ${key}: <span style="color:${color}">${value}</span>
                 </div>`;
             }
@@ -282,6 +343,101 @@ function updateHistory(text, emotion, aspects) {
             <span class="h-text"><strong>${i.text}</strong><br>${i.emotion}<br>${aspectHTML}</span>
         </div>`;
     }).join("");
+    updateSummary();
+}
+
+function updateSummary() {
+    const summaryDiv = document.getElementById("summary");
+    const chartBars = document.getElementById("chartBars");
+    const featureBars = document.getElementById("featureBars");
+
+    if (history.length === 0) {
+        summaryDiv.innerHTML = `<div class="summary-card">
+            <div style="font-size:14px; font-weight:600; color:#334155;">Live Insights</div>
+            <div style="margin-top:10px; color:#64748b; font-size:13px;">Add feedback to see daily sentiment and feature complaint trends.</div>
+        </div>`;
+        chartBars.innerHTML = `Chart will appear once feedback is added.`;
+        featureBars.innerHTML = `Feature complaint metrics will appear once feedback is added.`;
+        return;
+    }
+
+    const total = history.length;
+    const counts = { Happy: 0, Angry: 0, Neutral: 0 };
+    const featureTotals = {};
+    const featureRecentTotals = {};
+    const splitIndex = Math.ceil(total / 2);
+    const recentHistory = history.slice(0, splitIndex);
+    const previousHistory = history.slice(splitIndex);
+
+    history.forEach(item => {
+        counts[item.emotion] = (counts[item.emotion] || 0) + 1;
+        if (item.aspects) {
+            Object.entries(item.aspects).forEach(([key, value]) => {
+                if (value.includes("Not Satisfied")) {
+                    featureTotals[key] = (featureTotals[key] || 0) + 1;
+                }
+            });
+        }
+    });
+
+    recentHistory.forEach(item => {
+        if (item.aspects) {
+            Object.entries(item.aspects).forEach(([key, value]) => {
+                if (value.includes("Not Satisfied")) {
+                    featureRecentTotals[key] = (featureRecentTotals[key] || 0) + 1;
+                }
+            });
+        }
+    });
+
+    const happyPercent = Math.round((counts.Happy / total) * 100);
+    const angryPercent = Math.round((counts.Angry / total) * 100);
+    const neutralPercent = 100 - happyPercent - angryPercent;
+
+    const topComplaint = Object.entries(featureTotals).sort((a, b) => b[1] - a[1])[0];
+    const complaintText = topComplaint && topComplaint[1] > 0
+        ? `${topComplaint[0]} complaints are highest (${topComplaint[1]})`
+        : `No feature complaints yet.`;
+
+    let trendText = `No rising complaint trend yet.`;
+    if (Object.keys(featureRecentTotals).length) {
+        const trendFeature = Object.entries(featureRecentTotals)
+            .sort((a, b) => b[1] - a[1])[0];
+        if (trendFeature && featureTotals[trendFeature[0]] > 0) {
+            const previousCount = (featureTotals[trendFeature[0]] || 0) - trendFeature[1];
+            if (trendFeature[1] > previousCount) {
+                trendText = `${trendFeature[0]} complaints increased recently.`;
+            }
+        }
+    }
+
+    summaryDiv.innerHTML = `<div class="summary-card">
+        <div style="font-size:16px; font-weight:700; color:#334155;">${happyPercent}% customers are happy today</div>
+        <div style="margin-top:10px; color:#475569; font-size:13px;">${complaintText} ${trendText}</div>
+    </div>`;
+
+    const renderBar = (label, percent, color) => {
+        return `<div class="chart-row">
+            <div class="chart-label"><span>${label}</span><span>${percent}%</span></div>
+            <div class="chart-bar"><div style="width:${percent}%; background:${color};"></div></div>
+        </div>`;
+    };
+
+    chartBars.innerHTML = `
+        ${renderBar("Happy", happyPercent, "#22c55e")}
+        ${renderBar("Angry", angryPercent, "#ef4444")}
+        ${renderBar("Neutral", neutralPercent, "#f59e0b")}
+    `;
+
+    const featureEntries = Object.entries(featureTotals).sort((a, b) => b[1] - a[1]);
+    if (featureEntries.length === 0) {
+        featureBars.innerHTML = `No feature complaint data yet.`;
+    } else {
+        featureBars.innerHTML = featureEntries.slice(0, 4).map(([feature, count]) => {
+            const pct = Math.round((count / total) * 100);
+            return renderBar(`${feature} complaints`, pct, "#2563eb");
+        }).join("");
+    }
 }
 
 async function analyzeEmotion() {
