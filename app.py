@@ -17,22 +17,32 @@ CORS(app)
 # -------------------------------
 # Feature list (aspects)
 # -------------------------------
-features = ["battery", "camera", "display", "sound", "performance"]
+features = [
+    "battery", "camera", "display", "sound", "performance",
+    "service", "food", "quality", "price"
+]
 
 # -------------------------------
-# Sentiment keywords
+# Text correction (NEW 🔥)
 # -------------------------------
-positive_words = ["good", "great", "excellent", "amazing", "nice", "best"]
-negative_words = ["bad", "worst", "poor", "terrible", "not good", "not great"]
+def correct_text(text):
+    corrections = {
+        "wosre": "worse",
+        "gud": "good",
+        "bd": "bad"
+    }
+    for wrong, correct in corrections.items():
+        text = text.replace(wrong, correct)
+    return text
 
 # -------------------------------
-# BUT logic (IMPORTANT FIX)
+# BUT logic
 # -------------------------------
 def handle_but_logic(text):
     text = text.lower()
     if "but" in text:
         parts = text.split("but")
-        return parts[-1]   # take second part
+        return parts[-1]   # focus on second part
     return text
 
 # -------------------------------
@@ -42,22 +52,23 @@ def analyze_aspects(text):
     text = text.lower()
     result = {}
 
-    # Split sentence on "but"
-    parts = text.split("but")
+    # Handle both "and" + "but"
+    parts = text.replace("and", "but").split("but")
 
     for part in parts:
+        part = part.strip()
         words = part.split()
 
         for feature in features:
             if feature in words:
                 if "not good" in part or "not great" in part:
-                    result[feature] = "Not Satisfied ❌"
-                elif any(w in part for w in ["bad", "worst", "poor", "terrible"]):
-                    result[feature] = "Not Satisfied ❌"
+                    result[feature] = "Not Satisfied "
+                elif any(w in part for w in ["bad", "worst", "worse", "poor", "terrible"]):
+                    result[feature] = "Not Satisfied "
                 elif any(w in part for w in ["good", "great", "excellent", "amazing", "nice", "best"]):
-                    result[feature] = "Satisfied ✅"
+                    result[feature] = "Satisfied "
                 else:
-                    result[feature] = "Neutral 😐"
+                    result[feature] = "Neutral "
 
     return result
 
@@ -73,23 +84,45 @@ def predict():
         if not text.strip():
             return jsonify({"error": "Empty input"}), 400
 
-        # 👉 APPLY BUT LOGIC HERE
+        # 🔥 Fix spelling issues
+        text = correct_text(text)
+
+        # Apply BUT logic
         processed_text = handle_but_logic(text)
 
-        # Overall prediction (using processed text)
+        # Convert text to vector
         vector = vectorizer.transform([processed_text])
-        prediction = model.predict(vector)[0]
 
-        # Aspect prediction (use original text)
+        # RAW prediction
+        raw_prediction = model.predict(vector)[0]
+
+        # FINAL prediction
+        prediction = raw_prediction
+
+        # Aspect analysis
         aspects = analyze_aspects(text)
 
-        # Count satisfied vs not satisfied aspects
-        satisfied_count = sum(1 for v in aspects.values() if "Satisfied ✅" in v)
-        not_satisfied_count = sum(1 for v in aspects.values() if "Not Satisfied ❌" in v)
+        # Count sentiments
+        satisfied_count = sum(1 for v in aspects.values() if "Satisfied" in v)
+        not_satisfied_count = sum(1 for v in aspects.values() if "Not" in v)
 
-        # If both positive and negative aspects exist, override prediction to Neutral
+        # Override if mixed
         if satisfied_count > 0 and not_satisfied_count > 0:
             prediction = "Neutral"
+
+        # -------------------------------
+        # Backend Output (Clean)
+        # -------------------------------
+    
+        print("FINAL PREDICTION:", prediction)
+        print("Feature Analysis:")
+
+        if aspects:
+            for feature, value in aspects.items():
+                print(f"{feature} → {value}")
+        else:
+            print("No features detected")
+
 
         return jsonify({
             "prediction": prediction,
